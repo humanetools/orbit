@@ -1,13 +1,11 @@
 package platform
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	koyeb "github.com/koyeb/koyeb-api-client-go/api/v1/koyeb"
@@ -193,15 +191,14 @@ func (k *Koyeb) Redeploy(serviceID string) (*Deployment, error) {
 }
 
 func (k *Koyeb) GetLogs(serviceID string, opts LogOptions) ([]LogEntry, error) {
-	// Use the Koyeb streaming logs REST endpoint directly
 	limit := 100
 	if opts.Tail > 0 {
 		limit = opts.Tail
 	}
 
-	url := fmt.Sprintf("%s/v1/streams/logs?type=runtime&service_id=%s&limit=%d", koyebBaseURL, serviceID, limit)
+	url := fmt.Sprintf("%s/v1/streams/logs/query?type=runtime&service_id=%s&limit=%d&order=asc", koyebBaseURL, serviceID, limit)
 	if opts.Since > 0 {
-		start := time.Now().Add(-opts.Since).Format(time.RFC3339)
+		start := time.Now().UTC().Add(-opts.Since).Format(time.RFC3339)
 		url += "&start=" + start
 	}
 
@@ -225,46 +222,38 @@ func (k *Koyeb) GetLogs(serviceID string, opts LogOptions) ([]LogEntry, error) {
 		return nil, fmt.Errorf("koyeb logs API returned status %d", resp.StatusCode)
 	}
 
-	// Parse SSE stream
-	var entries []LogEntry
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data: ")
+	var result struct {
+		Data []struct {
+			Msg       string `json:"msg"`
+			CreatedAt string `json:"created_at"`
+			Labels    struct {
+				Stream string `json:"stream"`
+			} `json:"labels"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode logs response: %w", err)
+	}
 
-		var event struct {
-			Result struct {
-				CreatedAt string `json:"created_at"`
-				Msg       string `json:"msg"`
-				Labels    struct {
-					Stream string `json:"stream"`
-					Type   string `json:"type"`
-				} `json:"labels"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-		if event.Result.Msg == "" {
+	var entries []LogEntry
+	for _, item := range result.Data {
+		if item.Msg == "" {
 			continue
 		}
 
 		level := "info"
-		if event.Result.Labels.Stream == "stderr" {
+		if item.Labels.Stream == "stderr" {
 			level = "error"
 		}
 		if opts.Level != "" && level != opts.Level {
 			continue
 		}
 
-		ts, _ := time.Parse(time.RFC3339Nano, event.Result.CreatedAt)
+		ts, _ := time.Parse(time.RFC3339Nano, item.CreatedAt)
 		entries = append(entries, LogEntry{
 			Timestamp: ts,
 			Level:     level,
-			Message:   event.Result.Msg,
+			Message:   item.Msg,
 			Source:    "runtime",
 		})
 	}
@@ -502,8 +491,7 @@ func mapKoyebToWatchPhase(status string) string {
 }
 
 func (k *Koyeb) getDeploymentErrors(deployID string) ([]string, error) {
-	// Fetch recent error logs for this deployment
-	url := fmt.Sprintf("%s/v1/streams/logs?type=runtime&deployment_id=%s&limit=20", koyebBaseURL, deployID)
+	url := fmt.Sprintf("%s/v1/streams/logs/query?type=runtime&deployment_id=%s&limit=20&order=desc", koyebBaseURL, deployID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -521,27 +509,22 @@ func (k *Koyeb) getDeploymentErrors(deployID string) ([]string, error) {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
+	var result struct {
+		Data []struct {
+			Msg    string `json:"msg"`
+			Labels struct {
+				Stream string `json:"stream"`
+			} `json:"labels"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
 	var errLogs []string
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data: ")
-		var event struct {
-			Result struct {
-				Msg    string `json:"msg"`
-				Labels struct {
-					Stream string `json:"stream"`
-				} `json:"labels"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-		if event.Result.Labels.Stream == "stderr" && event.Result.Msg != "" {
-			errLogs = append(errLogs, event.Result.Msg)
+	for _, item := range result.Data {
+		if item.Labels.Stream == "stderr" && item.Msg != "" {
+			errLogs = append(errLogs, item.Msg)
 		}
 	}
 	return errLogs, nil
