@@ -10,9 +10,11 @@ import (
 
 // ServiceEntry represents a service within a project topology.
 type ServiceEntry struct {
-	Name     string `mapstructure:"name"     yaml:"name"`
-	Platform string `mapstructure:"platform" yaml:"platform"`
-	ID       string `mapstructure:"id"       yaml:"id"`
+	Name              string `mapstructure:"name"               yaml:"name"`
+	Platform          string `mapstructure:"platform"           yaml:"platform"`
+	ID                string `mapstructure:"id"                 yaml:"id"`
+	HeartbeatURL      string `mapstructure:"heartbeat_url"      yaml:"heartbeat_url,omitempty"`
+	HeartbeatInterval string `mapstructure:"heartbeat_interval" yaml:"heartbeat_interval,omitempty"`
 }
 
 // ProjectConfig represents a project with its service topology.
