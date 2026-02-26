@@ -1,8 +1,14 @@
 # Orbit
 
-A unified CLI for monitoring services deployed across multiple cloud platforms.
+<p align="center">
+  <img src="sample/sample_001.jpg" alt="orbit status — all services at a glance" width="720">
+</p>
 
-Orbit gives indie developers and small teams a single-pane view of services scattered across Vercel, Koyeb, and Supabase. Check status, tail logs, track deployments, and scale services — all from one command line.
+**Tired of switching between the Vercel dashboard, Koyeb console, and Supabase panel just to check if your deploy went through?**
+
+Orbit is an open-source CLI that gives you a unified view of services scattered across multiple cloud platforms. It's built for the Vibe Coding era — where AI coding assistants like Claude Code and Cursor handle the entire workflow from `git push` to deploy verification to error resolution, without a human ever opening a dashboard. Push, watch, analyze, fix — all in one flow.
+
+Supports Vercel, Koyeb, and Supabase. Built for indie developers and small teams.
 
 ## Install
 
