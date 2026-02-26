@@ -43,6 +43,7 @@ brews:
   - repository:
       owner: humanetools
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/humanetools/orbit"
     description: "Unified CLI for monitoring services across cloud platforms"
     license: "Apache-2.0"
