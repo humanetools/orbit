@@ -44,7 +44,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	latest := strings.TrimPrefix(release.TagName, "v")
-	current := version.Version
+	current := strings.TrimPrefix(version.Version, "v")
 
 	if latest == current {
 		fmt.Printf("Already up to date (v%s)\n", current)
