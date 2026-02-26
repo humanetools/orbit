@@ -68,7 +68,7 @@ func (s *Supabase) Validate(token string) error {
 }
 
 func (s *Supabase) GetServiceStatus(serviceID string) (*ServiceStatus, error) {
-	resp, err := s.doRequest("GET", fmt.Sprintf("/v1/projects/%s/health", serviceID))
+	resp, err := s.doRequest("GET", fmt.Sprintf("/v1/projects/%s/health?services=auth&services=db&services=realtime&services=rest&services=storage", serviceID))
 	if err != nil {
 		return nil, fmt.Errorf("get health: %w", err)
 	}
