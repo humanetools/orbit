@@ -9,7 +9,7 @@ Orbit gives indie developers and small teams a single-pane view of services scat
 **Linux / macOS:**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/humanetools/orbit/main/install.sh | sh
+source <(curl -sSL https://raw.githubusercontent.com/humanetools/orbit/main/install.sh)
 ```
 
 **Homebrew (macOS):**
