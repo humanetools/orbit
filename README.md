@@ -6,6 +6,18 @@ Orbit gives indie developers and small teams a single-pane view of services scat
 
 ## Install
 
+**Linux / macOS:**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/humanetools/orbit/main/install.sh | sh
+```
+
+**Homebrew (macOS):**
+
+```bash
+brew install humanetools/tap/orbit
+```
+
 **Go install:**
 
 ```bash
