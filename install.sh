@@ -58,5 +58,17 @@ case ":$PATH:" in
     ;;
 esac
 
-echo "orbit v${VERSION} installed to $INSTALL_DIR/orbit"
+echo ""
 "$INSTALL_DIR/orbit" --version
+echo ""
+echo "Installed to $INSTALL_DIR/orbit"
+
+# Check if orbit is reachable in current PATH
+if ! command -v orbit >/dev/null 2>&1; then
+  echo ""
+  echo "To start using orbit, run:"
+  echo ""
+  echo "  source ~/.bashrc"
+  echo ""
+  echo "Or open a new terminal."
+fi
