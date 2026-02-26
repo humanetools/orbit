@@ -68,7 +68,7 @@ func (v *Vercel) Validate(token string) error {
 }
 
 func (v *Vercel) GetServiceStatus(serviceID string) (*ServiceStatus, error) {
-	resp, err := v.doRequest("GET", fmt.Sprintf("/v13/deployments?projectId=%s&limit=1&state=READY", serviceID))
+	resp, err := v.doRequest("GET", fmt.Sprintf("/v6/deployments?projectId=%s&limit=1&state=READY", serviceID))
 	if err != nil {
 		return nil, fmt.Errorf("get deployments: %w", err)
 	}
@@ -128,7 +128,7 @@ func mapVercelState(state string) string {
 }
 
 func (v *Vercel) ListDeployments(serviceID string, limit int) ([]Deployment, error) {
-	resp, err := v.doRequest("GET", fmt.Sprintf("/v13/deployments?projectId=%s&limit=%d", serviceID, limit))
+	resp, err := v.doRequest("GET", fmt.Sprintf("/v6/deployments?projectId=%s&limit=%d", serviceID, limit))
 	if err != nil {
 		return nil, fmt.Errorf("list deployments: %w", err)
 	}
@@ -169,7 +169,7 @@ func (v *Vercel) ListDeployments(serviceID string, limit int) ([]Deployment, err
 }
 
 func (v *Vercel) GetDeployment(deployID string) (*Deployment, error) {
-	resp, err := v.doRequest("GET", "/v13/deployments/"+deployID)
+	resp, err := v.doRequest("GET", "/v6/deployments/"+deployID)
 	if err != nil {
 		return nil, fmt.Errorf("get deployment: %w", err)
 	}
@@ -215,7 +215,7 @@ func (v *Vercel) Redeploy(serviceID string) (*Deployment, error) {
 
 func (v *Vercel) GetLogs(serviceID string, opts LogOptions) ([]LogEntry, error) {
 	// Get the latest deployment for this project
-	resp, err := v.doRequest("GET", fmt.Sprintf("/v13/deployments?projectId=%s&limit=1", serviceID))
+	resp, err := v.doRequest("GET", fmt.Sprintf("/v6/deployments?projectId=%s&limit=1", serviceID))
 	if err != nil {
 		return nil, fmt.Errorf("get deployments: %w", err)
 	}
