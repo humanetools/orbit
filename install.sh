@@ -63,12 +63,5 @@ echo ""
 echo ""
 echo "Installed to $INSTALL_DIR/orbit"
 
-# Check if orbit is reachable in current PATH
-if ! command -v orbit >/dev/null 2>&1; then
-  echo ""
-  echo "To start using orbit, run:"
-  echo ""
-  echo "  source ~/.bashrc"
-  echo ""
-  echo "Or open a new terminal."
-fi
+# Make orbit available in current shell
+export PATH="$INSTALL_DIR:$PATH"
