@@ -183,11 +183,12 @@ func (v *Vercel) GetDeployment(deployID string) (*Deployment, error) {
 	}
 
 	var d struct {
-		UID     string `json:"uid"`
-		State   string `json:"state"`
-		Created int64  `json:"created"`
-		URL     string `json:"url"`
-		Meta    struct {
+		UID        string `json:"uid"`
+		State      string `json:"state"`
+		ReadyState string `json:"readyState"`
+		Created    int64  `json:"created"`
+		URL        string `json:"url"`
+		Meta       struct {
 			GitCommitSha     string `json:"githubCommitSha"`
 			GitCommitMessage string `json:"githubCommitMessage"`
 		} `json:"meta"`
@@ -196,9 +197,15 @@ func (v *Vercel) GetDeployment(deployID string) (*Deployment, error) {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	// The individual deployment endpoint returns readyState instead of state
+	state := d.State
+	if state == "" {
+		state = d.ReadyState
+	}
+
 	dep := &Deployment{
 		ID:        d.UID,
-		Status:    mapVercelState(d.State),
+		Status:    mapVercelState(state),
 		Commit:    d.Meta.GitCommitSha,
 		Message:   d.Meta.GitCommitMessage,
 		CreatedAt: time.UnixMilli(d.Created),
@@ -341,6 +348,25 @@ func (v *Vercel) WatchDeployment(serviceID string, currentDeployID string) (<-ch
 
 		const pollInterval = 3 * time.Second
 
+		// Check if the latest deployment is already in-progress.
+		// This handles the race where git push triggers a deployment before watch starts,
+		// so currentDeployID already points to the new (building) deployment.
+		deploys, err := v.ListDeployments(serviceID, 1)
+		if err != nil {
+			ch <- DeployEvent{Phase: "failed", Error: fmt.Errorf("poll deployments: %w", err)}
+			return
+		}
+		if len(deploys) > 0 && isInProgress(deploys[0].Status) {
+			d := deploys[0]
+			ch <- DeployEvent{
+				Phase:   "detected",
+				Message: fmt.Sprintf("In-progress deployment found (%s)", d.ID),
+				Deploy:  &d,
+			}
+			v.trackDeployment(ch, d.ID)
+			return
+		}
+
 		// Phase 1: Detect a new deployment
 		for {
 			deploys, err := v.ListDeployments(serviceID, 1)
@@ -349,17 +375,17 @@ func (v *Vercel) WatchDeployment(serviceID string, currentDeployID string) (<-ch
 				return
 			}
 
-			if len(deploys) > 0 && deploys[0].ID != currentDeployID {
+			if len(deploys) > 0 {
 				d := deploys[0]
-				ch <- DeployEvent{
-					Phase:   "detected",
-					Message: fmt.Sprintf("New deployment detected! (%s)", d.ID),
-					Deploy:  &d,
+				if d.ID != currentDeployID {
+					ch <- DeployEvent{
+						Phase:   "detected",
+						Message: fmt.Sprintf("New deployment detected! (%s)", d.ID),
+						Deploy:  &d,
+					}
+					v.trackDeployment(ch, d.ID)
+					return
 				}
-
-				// Phase 2: Track deployment progress
-				v.trackDeployment(ch, d.ID)
-				return
 			}
 
 			ch <- DeployEvent{Phase: "waiting", Message: "Waiting for new deployment..."}

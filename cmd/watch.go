@@ -181,8 +181,9 @@ func watchSingleService(resolved *resolvedService, projectName string, timeout t
 
 	isJSON := watchFormat == "json"
 
-	// Get current deployment ID
-	deploys, err := resolved.Platform.ListDeployments(resolved.Entry.ID, 1)
+	// Get last 2 deployments to handle the race condition where
+	// git push triggers a deployment before watch starts.
+	deploys, err := resolved.Platform.ListDeployments(resolved.Entry.ID, 2)
 	if err != nil {
 		result.ExitCode = exitFailed
 		result.Error = fmt.Sprintf("list deployments: %s", err)
@@ -194,7 +195,15 @@ func watchSingleService(resolved *resolvedService, projectName string, timeout t
 
 	currentDeployID := ""
 	if len(deploys) > 0 {
-		currentDeployID = deploys[0].ID
+		latest := deploys[0]
+		// If the latest deployment was created recently (within 3 minutes),
+		// it's likely from the push that triggered this watch.
+		// Use the previous deployment as baseline so WatchDeployment detects it as new.
+		if time.Since(latest.CreatedAt) < 3*time.Minute && len(deploys) > 1 {
+			currentDeployID = deploys[1].ID
+		} else {
+			currentDeployID = latest.ID
+		}
 	}
 
 	if !isJSON {
@@ -426,7 +435,7 @@ func watchSingleServiceQuiet(resolved *resolvedService, timeout time.Duration) w
 		Platform:    resolved.Entry.Platform,
 	}
 
-	deploys, err := resolved.Platform.ListDeployments(resolved.Entry.ID, 1)
+	deploys, err := resolved.Platform.ListDeployments(resolved.Entry.ID, 2)
 	if err != nil {
 		result.ExitCode = exitFailed
 		result.Error = fmt.Sprintf("list deployments: %s", err)
@@ -435,7 +444,12 @@ func watchSingleServiceQuiet(resolved *resolvedService, timeout time.Duration) w
 
 	currentDeployID := ""
 	if len(deploys) > 0 {
-		currentDeployID = deploys[0].ID
+		latest := deploys[0]
+		if time.Since(latest.CreatedAt) < 3*time.Minute && len(deploys) > 1 {
+			currentDeployID = deploys[1].ID
+		} else {
+			currentDeployID = latest.ID
+		}
 	}
 
 	ch, err := resolved.Platform.WatchDeployment(resolved.Entry.ID, currentDeployID)

@@ -112,6 +112,17 @@ func IsSupported(name string) bool {
 	return ok
 }
 
+// isInProgress returns true if the deployment status indicates a non-terminal state.
+// Used by WatchDeployment to detect in-progress deployments that started before watch began.
+func isInProgress(status string) bool {
+	switch status {
+	case "building", "deploying", "pending":
+		return true
+	default:
+		return false
+	}
+}
+
 // TokenURL returns the URL where users can obtain an API token for a platform.
 func TokenURL(name string) string {
 	switch name {

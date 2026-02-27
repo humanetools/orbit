@@ -396,6 +396,25 @@ func (k *Koyeb) WatchDeployment(serviceID string, currentDeployID string) (<-cha
 
 		const pollInterval = 3 * time.Second
 
+		// Check if the latest deployment is already in-progress.
+		// This handles the race where git push triggers a deployment before watch starts,
+		// so currentDeployID already points to the new (building) deployment.
+		deploys, err := k.ListDeployments(serviceID, 1)
+		if err != nil {
+			ch <- DeployEvent{Phase: "failed", Error: fmt.Errorf("poll deployments: %w", err)}
+			return
+		}
+		if len(deploys) > 0 && isInProgress(deploys[0].Status) {
+			d := deploys[0]
+			ch <- DeployEvent{
+				Phase:   "detected",
+				Message: fmt.Sprintf("In-progress deployment found (%s)", d.ID),
+				Deploy:  &d,
+			}
+			k.trackDeployment(ch, d.ID)
+			return
+		}
+
 		// Phase 1: Detect a new deployment
 		for {
 			deploys, err := k.ListDeployments(serviceID, 1)
@@ -404,17 +423,17 @@ func (k *Koyeb) WatchDeployment(serviceID string, currentDeployID string) (<-cha
 				return
 			}
 
-			if len(deploys) > 0 && deploys[0].ID != currentDeployID {
+			if len(deploys) > 0 {
 				d := deploys[0]
-				ch <- DeployEvent{
-					Phase:   "detected",
-					Message: fmt.Sprintf("New deployment detected! (%s)", d.ID),
-					Deploy:  &d,
+				if d.ID != currentDeployID {
+					ch <- DeployEvent{
+						Phase:   "detected",
+						Message: fmt.Sprintf("New deployment detected! (%s)", d.ID),
+						Deploy:  &d,
+					}
+					k.trackDeployment(ch, d.ID)
+					return
 				}
-
-				// Phase 2: Track deployment progress
-				k.trackDeployment(ch, d.ID)
-				return
 			}
 
 			ch <- DeployEvent{Phase: "waiting", Message: "Waiting for new deployment..."}
