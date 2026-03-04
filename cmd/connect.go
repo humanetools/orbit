@@ -18,7 +18,7 @@ var connectCmd = &cobra.Command{
 	Use:   "connect <platform>",
 	Short: "Connect a cloud platform with an API token",
 	Long: `Connect a cloud platform by providing an API token.
-Supported platforms: vercel, koyeb, supabase.
+Supported platforms: vercel, koyeb, supabase, render.
 
 The token is validated against the platform API, then encrypted and stored locally.`,
 	Args: cobra.ExactArgs(1),
@@ -34,7 +34,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	name := strings.ToLower(args[0])
 
 	if !platform.IsSupported(name) {
-		return fmt.Errorf("unsupported platform: %s\nSupported: vercel, koyeb, supabase", name)
+		return fmt.Errorf("unsupported platform: %s\nSupported: vercel, koyeb, supabase, render", name)
 	}
 
 	token := connectToken

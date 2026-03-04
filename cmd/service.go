@@ -42,7 +42,7 @@ var serviceRemoveCmd = &cobra.Command{
 
 func init() {
 	serviceAddCmd.Flags().StringVar(&serviceAddName, "name", "", "Service name")
-	serviceAddCmd.Flags().StringVar(&serviceAddPlatform, "platform", "", "Platform (vercel, koyeb, supabase)")
+	serviceAddCmd.Flags().StringVar(&serviceAddPlatform, "platform", "", "Platform (vercel, koyeb, supabase, render)")
 	serviceAddCmd.Flags().StringVar(&serviceAddID, "id", "", "Service ID on the platform")
 	serviceAddCmd.MarkFlagRequired("name")
 	serviceAddCmd.MarkFlagRequired("platform")
@@ -61,7 +61,7 @@ func runServiceAdd(cmd *cobra.Command, args []string) error {
 	platName := strings.ToLower(serviceAddPlatform)
 
 	if !platform.IsSupported(platName) {
-		return fmt.Errorf("unsupported platform: %s\nSupported: vercel, koyeb, supabase", platName)
+		return fmt.Errorf("unsupported platform: %s\nSupported: vercel, koyeb, supabase, render", platName)
 	}
 
 	cfg, err := config.Load()

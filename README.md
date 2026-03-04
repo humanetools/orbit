@@ -4,11 +4,11 @@
   <img src="sample/sample_001.jpg" alt="orbit status — all services at a glance" width="720">
 </p>
 
-**Tired of switching between the Vercel dashboard, Koyeb console, and Supabase panel just to check if your deploy went through?**
+**Tired of switching between the Vercel dashboard, Koyeb console, Supabase panel, and Render dashboard just to check if your deploy went through?**
 
 Orbit is an open-source CLI that gives you a unified view of services scattered across multiple cloud platforms. It's built for the Vibe Coding era — where AI coding assistants like Claude Code and Cursor handle the entire workflow from `git push` to deploy verification to error resolution, without a human ever opening a dashboard. Push, watch, analyze, fix — all in one flow.
 
-Supports Vercel, Koyeb, and Supabase. Built for indie developers and small teams.
+Supports Vercel, Koyeb, Supabase, and Render. Built for indie developers and small teams.
 
 ## Install
 
@@ -146,6 +146,7 @@ Or connect platforms individually:
 orbit connect vercel
 orbit connect koyeb
 orbit connect supabase
+orbit connect render
 
 # Check everything at a glance
 orbit status
@@ -216,6 +217,7 @@ JSON output includes deploy ID, commit, duration, error logs — everything need
 | **Vercel** | Health, metrics | Build events | Full history | Auto (N/A) | Polling |
 | **Koyeb** | Health, metrics | Runtime (SSE) | Full history | Min/max, instance type | Polling |
 | **Supabase** | Health check | Dashboard only | N/A | N/A | N/A |
+| **Render** | Health, suspend | Runtime logs | Full history | Instance count | Polling |
 
 ## Configuration
 
@@ -268,7 +270,7 @@ orbit/
 │   └── disconnect.go        # orbit disconnect
 ├── internal/
 │   ├── config/              # Config + AES-256 encryption
-│   ├── platform/            # Platform adapters (Vercel, Koyeb, Supabase)
+│   ├── platform/            # Platform adapters (Vercel, Koyeb, Supabase, Render)
 │   ├── ui/                  # TUI components (Lipgloss, Bubbletea)
 │   └── version/             # Build version info
 ├── main.go
