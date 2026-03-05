@@ -1,8 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
+	"os/signal"
+	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/humanetools/orbit/internal/config"
@@ -15,6 +21,7 @@ var (
 	heartbeatURL      string
 	heartbeatInterval string
 	heartbeatRemove   bool
+	heartbeatRunSvc   string
 )
 
 var heartbeatCmd = &cobra.Command{
@@ -24,7 +31,7 @@ var heartbeatCmd = &cobra.Command{
 
   orbit heartbeat myshop                                        Show heartbeat status
   orbit heartbeat myshop --service api --url https://url/health  Register heartbeat
-  orbit heartbeat myshop --service api --interval 5m             Set interval (default 5m)
+  orbit heartbeat myshop --service api --interval 10s-40s        Set random interval range
   orbit heartbeat myshop --service api --remove                  Remove heartbeat
 
 When viewing, each configured URL is pinged to show current response time.`,
@@ -32,11 +39,28 @@ When viewing, each configured URL is pinged to show current response time.`,
 	RunE: runHeartbeat,
 }
 
+var heartbeatRunCmd = &cobra.Command{
+	Use:   "run <project>",
+	Short: "Run heartbeat daemon (Ctrl+C to stop)",
+	Long: `Start a daemon that periodically pings registered heartbeat URLs.
+
+  orbit heartbeat run myshop                  Ping all services
+  orbit heartbeat run myshop --service api    Ping specific service only
+
+Interval supports random ranges (e.g. 10s-40s) for bot detection avoidance.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runHeartbeatDaemon,
+}
+
 func init() {
 	heartbeatCmd.Flags().StringVar(&heartbeatService, "service", "", "Service name")
 	heartbeatCmd.Flags().StringVar(&heartbeatURL, "url", "", "Health check URL")
-	heartbeatCmd.Flags().StringVar(&heartbeatInterval, "interval", "5m", "Ping interval (e.g. 5m, 30s)")
+	heartbeatCmd.Flags().StringVar(&heartbeatInterval, "interval", "5m", "Ping interval (e.g. 5m, 30s, 10s-40s)")
 	heartbeatCmd.Flags().BoolVar(&heartbeatRemove, "remove", false, "Remove heartbeat for a service")
+
+	heartbeatRunCmd.Flags().StringVar(&heartbeatRunSvc, "service", "", "Ping specific service only")
+	heartbeatCmd.AddCommand(heartbeatRunCmd)
+
 	rootCmd.AddCommand(heartbeatCmd)
 }
 
@@ -177,6 +201,124 @@ func showHeartbeats(projectName string, proj *config.ProjectConfig) error {
 	}
 
 	fmt.Println()
+	return nil
+}
+
+// parseInterval parses interval strings like "5m" (fixed) or "10s-40s" (random range).
+func parseInterval(s string) (min, max time.Duration, err error) {
+	if idx := strings.Index(s, "-"); idx > 0 {
+		minStr := s[:idx]
+		maxStr := s[idx+1:]
+		min, err = time.ParseDuration(minStr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("invalid min duration %q: %w", minStr, err)
+		}
+		max, err = time.ParseDuration(maxStr)
+		if err != nil {
+			return 0, 0, fmt.Errorf("invalid max duration %q: %w", maxStr, err)
+		}
+		if min > max {
+			return 0, 0, fmt.Errorf("min (%s) must be <= max (%s)", min, max)
+		}
+		return min, max, nil
+	}
+
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	return d, d, nil
+}
+
+func randomDuration(min, max time.Duration) time.Duration {
+	if min == max {
+		return min
+	}
+	return min + time.Duration(rand.Int63n(int64(max-min)))
+}
+
+func runHeartbeatDaemon(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	proj, ok := cfg.Projects[projectName]
+	if !ok {
+		return fmt.Errorf("project %q not found\nAvailable projects: %s", projectName, projectNames(cfg))
+	}
+
+	type target struct {
+		name     string
+		url      string
+		min, max time.Duration
+	}
+
+	var targets []target
+	for _, svc := range proj.Topology {
+		if svc.HeartbeatURL == "" {
+			continue
+		}
+		if heartbeatRunSvc != "" && svc.Name != heartbeatRunSvc {
+			continue
+		}
+		interval := svc.HeartbeatInterval
+		if interval == "" {
+			interval = "5m"
+		}
+		mn, mx, err := parseInterval(interval)
+		if err != nil {
+			return fmt.Errorf("service %q: %w", svc.Name, err)
+		}
+		targets = append(targets, target{name: svc.Name, url: svc.HeartbeatURL, min: mn, max: mx})
+	}
+
+	if len(targets) == 0 {
+		if heartbeatRunSvc != "" {
+			return fmt.Errorf("no heartbeat configured for service %q in project %q", heartbeatRunSvc, projectName)
+		}
+		return fmt.Errorf("no heartbeats configured in project %q\nRegister: orbit heartbeat %s --service <name> --url <health-url>", projectName, projectName)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	fmt.Printf("\n  %s Heartbeat daemon started for %s (%d services)\n",
+		ui.IconSuccess, ui.ProjectTitleStyle.Render(projectName), len(targets))
+	fmt.Printf("  Press Ctrl+C to stop.\n\n")
+
+	var wg sync.WaitGroup
+	for _, t := range targets {
+		wg.Add(1)
+		go func(t target) {
+			defer wg.Done()
+			for {
+				respTime, err := pingURL(t.url)
+				now := time.Now().Format("15:04:05")
+				if err != nil {
+					fmt.Printf("  [%s] %-12s  %s %s\n", now,
+						t.name, ui.ErrorStyle.Render("✗"), ui.ErrorStyle.Render(err.Error()))
+				} else {
+					fmt.Printf("  [%s] %-12s  %s %dms\n", now,
+						t.name, ui.HealthyStyle.Render("✓"), respTime)
+				}
+
+				wait := randomDuration(t.min, t.max)
+				select {
+				case <-time.After(wait):
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(t)
+	}
+
+	<-ctx.Done()
+	fmt.Printf("\n  Stopping...\n")
+	wg.Wait()
+	fmt.Printf("  %s Heartbeat daemon stopped.\n\n", ui.IconSuccess)
 	return nil
 }
 
