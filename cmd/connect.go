@@ -12,7 +12,10 @@ import (
 	"golang.org/x/term"
 )
 
-var connectToken string
+var (
+	connectToken  string
+	connectTeamID string
+)
 
 var connectCmd = &cobra.Command{
 	Use:   "connect <platform>",
@@ -27,6 +30,7 @@ The token is validated against the platform API, then encrypted and stored local
 
 func init() {
 	connectCmd.Flags().StringVar(&connectToken, "token", "", "API token (non-interactive mode)")
+	connectCmd.Flags().StringVar(&connectTeamID, "team-id", "", "Team/org ID (Vercel)")
 	rootCmd.AddCommand(connectCmd)
 }
 
@@ -89,7 +93,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	cfg.Platforms[name] = config.PlatformConfig{Token: encrypted}
+	cfg.Platforms[name] = config.PlatformConfig{Token: encrypted, TeamID: connectTeamID}
 
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)

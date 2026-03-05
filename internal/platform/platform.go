@@ -77,6 +77,11 @@ type Platform interface {
 	WatchDeployment(serviceID string, currentDeployID string) (<-chan DeployEvent, error)
 }
 
+// TeamConfigurable is implemented by platforms that support team/org scoping.
+type TeamConfigurable interface {
+	SetTeamID(id string)
+}
+
 // Constructor creates a new Platform instance with the given API token.
 type Constructor func(token string) Platform
 

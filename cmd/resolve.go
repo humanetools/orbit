@@ -70,6 +70,12 @@ func resolveService(cfg *config.Config, key []byte, projectName, serviceName str
 		return nil, err
 	}
 
+	if pc.TeamID != "" {
+		if tc, ok := p.(platform.TeamConfigurable); ok {
+			tc.SetTeamID(pc.TeamID)
+		}
+	}
+
 	return &resolvedService{
 		Entry:    *entry,
 		Platform: p,

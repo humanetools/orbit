@@ -194,6 +194,12 @@ func fetchSingleStatus(entry config.ServiceEntry, cfg *config.Config, key []byte
 		return nil, err
 	}
 
+	if pc.TeamID != "" {
+		if tc, ok := p.(platform.TeamConfigurable); ok {
+			tc.SetTeamID(pc.TeamID)
+		}
+	}
+
 	return p.GetServiceStatus(entry.ID)
 }
 

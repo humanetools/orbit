@@ -24,7 +24,8 @@ type ProjectConfig struct {
 
 // PlatformConfig holds credentials for a connected platform.
 type PlatformConfig struct {
-	Token string `mapstructure:"token" yaml:"token"`
+	Token  string `mapstructure:"token"   yaml:"token"`
+	TeamID string `mapstructure:"team_id" yaml:"team_id,omitempty"`
 }
 
 // ThresholdConfig holds alerting thresholds.

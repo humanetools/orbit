@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -18,7 +19,12 @@ func init() {
 // Vercel implements the Platform interface using net/http.
 type Vercel struct {
 	token      string
+	teamID     string
 	httpClient *http.Client
+}
+
+func (v *Vercel) SetTeamID(id string) {
+	v.teamID = id
 }
 
 // NewVercel creates a new Vercel platform instance.
@@ -34,7 +40,15 @@ func (v *Vercel) Name() string {
 }
 
 func (v *Vercel) doRequest(method, path string) (*http.Response, error) {
-	req, err := http.NewRequest(method, vercelBaseURL+path, nil)
+	reqURL := vercelBaseURL + path
+	if v.teamID != "" {
+		if strings.Contains(path, "?") {
+			reqURL += "&teamId=" + v.teamID
+		} else {
+			reqURL += "?teamId=" + v.teamID
+		}
+	}
+	req, err := http.NewRequest(method, reqURL, nil)
 	if err != nil {
 		return nil, err
 	}

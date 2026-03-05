@@ -108,6 +108,11 @@ func runDeploys(cmd *cobra.Command, args []string) error {
 				results[idx].Err = err
 				return
 			}
+			if pc.TeamID != "" {
+				if tc, ok := p.(platform.TeamConfigurable); ok {
+					tc.SetTeamID(pc.TeamID)
+				}
+			}
 			deploys, err := p.ListDeployments(e.ID, deploysLimit)
 			results[idx].Deployments = deploys
 			results[idx].Err = err
