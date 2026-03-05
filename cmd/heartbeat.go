@@ -316,7 +316,7 @@ func runHeartbeatDaemon(cmd *cobra.Command, args []string) error {
 		child := exec.Command(exePath, forkArgs...)
 		child.Stdout = logFile
 		child.Stderr = logFile
-		child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		setSysProcAttr(child)
 
 		if err := child.Start(); err != nil {
 			logFile.Close()
