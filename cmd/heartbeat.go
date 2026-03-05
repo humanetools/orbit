@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -22,6 +26,7 @@ var (
 	heartbeatInterval string
 	heartbeatRemove   bool
 	heartbeatRunSvc   string
+	heartbeatDaemon   bool
 )
 
 var heartbeatCmd = &cobra.Command{
@@ -46,10 +51,18 @@ var heartbeatRunCmd = &cobra.Command{
 
   orbit heartbeat run myshop                  Ping all services
   orbit heartbeat run myshop --service api    Ping specific service only
+  orbit heartbeat run myshop --daemon         Run in background
 
 Interval supports random ranges (e.g. 10s-40s) for bot detection avoidance.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runHeartbeatDaemon,
+}
+
+var heartbeatStopCmd = &cobra.Command{
+	Use:   "stop <project>",
+	Short: "Stop a background heartbeat daemon",
+	Args:  cobra.ExactArgs(1),
+	RunE:  stopHeartbeatDaemon,
 }
 
 func init() {
@@ -59,7 +72,9 @@ func init() {
 	heartbeatCmd.Flags().BoolVar(&heartbeatRemove, "remove", false, "Remove heartbeat for a service")
 
 	heartbeatRunCmd.Flags().StringVar(&heartbeatRunSvc, "service", "", "Ping specific service only")
+	heartbeatRunCmd.Flags().BoolVarP(&heartbeatDaemon, "daemon", "d", false, "Run in background")
 	heartbeatCmd.AddCommand(heartbeatRunCmd)
+	heartbeatCmd.AddCommand(heartbeatStopCmd)
 
 	rootCmd.AddCommand(heartbeatCmd)
 }
@@ -237,8 +252,87 @@ func randomDuration(min, max time.Duration) time.Duration {
 	return min + time.Duration(rand.Int63n(int64(max-min)))
 }
 
+func heartbeatPidPath(project string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".orbit", fmt.Sprintf("heartbeat-%s.pid", project))
+}
+
+func heartbeatLogPath(project string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".orbit", fmt.Sprintf("heartbeat-%s.log", project))
+}
+
+func stopHeartbeatDaemon(cmd *cobra.Command, args []string) error {
+	projectName := args[0]
+	pidFile := heartbeatPidPath(projectName)
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		return fmt.Errorf("no running daemon for project %q", projectName)
+	}
+
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		os.Remove(pidFile)
+		return fmt.Errorf("invalid PID file, removed")
+	}
+
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		os.Remove(pidFile)
+		return fmt.Errorf("process %d not found, removed stale PID file", pid)
+	}
+
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		os.Remove(pidFile)
+		return fmt.Errorf("process %d not running, removed stale PID file", pid)
+	}
+
+	os.Remove(pidFile)
+	fmt.Printf("  %s Heartbeat daemon stopped (PID %d)\n", ui.IconSuccess, pid)
+	return nil
+}
+
 func runHeartbeatDaemon(cmd *cobra.Command, args []string) error {
 	projectName := args[0]
+
+	// --daemon: fork self in background
+	if heartbeatDaemon {
+		exePath, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("resolve executable: %w", err)
+		}
+
+		forkArgs := []string{"heartbeat", "run", projectName}
+		if heartbeatRunSvc != "" {
+			forkArgs = append(forkArgs, "--service", heartbeatRunSvc)
+		}
+
+		logFile, err := os.OpenFile(heartbeatLogPath(projectName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("open log file: %w", err)
+		}
+
+		child := exec.Command(exePath, forkArgs...)
+		child.Stdout = logFile
+		child.Stderr = logFile
+		child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+		if err := child.Start(); err != nil {
+			logFile.Close()
+			return fmt.Errorf("start daemon: %w", err)
+		}
+		logFile.Close()
+
+		if err := os.WriteFile(heartbeatPidPath(projectName), []byte(strconv.Itoa(child.Process.Pid)), 0644); err != nil {
+			return fmt.Errorf("write PID file: %w", err)
+		}
+
+		fmt.Printf("  %s Heartbeat daemon started in background (PID %d)\n", ui.IconSuccess, child.Process.Pid)
+		fmt.Printf("  Log: %s\n", heartbeatLogPath(projectName))
+		fmt.Printf("  Stop: orbit heartbeat stop %s\n", projectName)
+		return nil
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
