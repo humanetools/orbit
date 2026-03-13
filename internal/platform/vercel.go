@@ -20,11 +20,16 @@ func init() {
 type Vercel struct {
 	token      string
 	teamID     string
+	target     string // "production" or "preview"
 	httpClient *http.Client
 }
 
 func (v *Vercel) SetTeamID(id string) {
 	v.teamID = id
+}
+
+func (v *Vercel) SetTarget(target string) {
+	v.target = target
 }
 
 // NewVercel creates a new Vercel platform instance.
@@ -81,8 +86,15 @@ func (v *Vercel) Validate(token string) error {
 	return nil
 }
 
+func (v *Vercel) deployQuery(base string) string {
+	if v.target != "" {
+		return base + "&target=" + v.target
+	}
+	return base
+}
+
 func (v *Vercel) GetServiceStatus(serviceID string) (*ServiceStatus, error) {
-	resp, err := v.doRequest("GET", fmt.Sprintf("/v6/deployments?projectId=%s&limit=1&state=READY", serviceID))
+	resp, err := v.doRequest("GET", v.deployQuery(fmt.Sprintf("/v6/deployments?projectId=%s&limit=1&state=READY", serviceID)))
 	if err != nil {
 		return nil, fmt.Errorf("get deployments: %w", err)
 	}
@@ -142,7 +154,7 @@ func mapVercelState(state string) string {
 }
 
 func (v *Vercel) ListDeployments(serviceID string, limit int) ([]Deployment, error) {
-	resp, err := v.doRequest("GET", fmt.Sprintf("/v6/deployments?projectId=%s&limit=%d", serviceID, limit))
+	resp, err := v.doRequest("GET", v.deployQuery(fmt.Sprintf("/v6/deployments?projectId=%s&limit=%d", serviceID, limit)))
 	if err != nil {
 		return nil, fmt.Errorf("list deployments: %w", err)
 	}
@@ -236,7 +248,7 @@ func (v *Vercel) Redeploy(serviceID string) (*Deployment, error) {
 
 func (v *Vercel) GetLogs(serviceID string, opts LogOptions) ([]LogEntry, error) {
 	// Get the latest deployment for this project
-	resp, err := v.doRequest("GET", fmt.Sprintf("/v6/deployments?projectId=%s&limit=1", serviceID))
+	resp, err := v.doRequest("GET", v.deployQuery(fmt.Sprintf("/v6/deployments?projectId=%s&limit=1", serviceID)))
 	if err != nil {
 		return nil, fmt.Errorf("get deployments: %w", err)
 	}

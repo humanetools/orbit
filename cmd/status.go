@@ -200,6 +200,12 @@ func fetchSingleStatus(entry config.ServiceEntry, cfg *config.Config, key []byte
 		}
 	}
 
+	if entry.Target != "" {
+		if tc, ok := p.(platform.TargetConfigurable); ok {
+			tc.SetTarget(entry.Target)
+		}
+	}
+
 	return p.GetServiceStatus(entry.ID)
 }
 

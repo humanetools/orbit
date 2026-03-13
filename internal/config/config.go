@@ -13,6 +13,7 @@ type ServiceEntry struct {
 	Name              string `mapstructure:"name"               yaml:"name"`
 	Platform          string `mapstructure:"platform"           yaml:"platform"`
 	ID                string `mapstructure:"id"                 yaml:"id"`
+	Target            string `mapstructure:"target"             yaml:"target,omitempty"`
 	HeartbeatURL      string `mapstructure:"heartbeat_url"      yaml:"heartbeat_url,omitempty"`
 	HeartbeatInterval string `mapstructure:"heartbeat_interval" yaml:"heartbeat_interval,omitempty"`
 }

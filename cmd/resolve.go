@@ -76,6 +76,12 @@ func resolveService(cfg *config.Config, key []byte, projectName, serviceName str
 		}
 	}
 
+	if entry.Target != "" {
+		if tc, ok := p.(platform.TargetConfigurable); ok {
+			tc.SetTarget(entry.Target)
+		}
+	}
+
 	return &resolvedService{
 		Entry:    *entry,
 		Platform: p,

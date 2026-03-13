@@ -82,6 +82,11 @@ type TeamConfigurable interface {
 	SetTeamID(id string)
 }
 
+// TargetConfigurable is implemented by platforms that support deployment target filtering (e.g. production vs preview).
+type TargetConfigurable interface {
+	SetTarget(target string)
+}
+
 // Constructor creates a new Platform instance with the given API token.
 type Constructor func(token string) Platform
 
