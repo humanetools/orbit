@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -20,6 +22,7 @@ func init() {
 // Render implements the Platform interface using net/http.
 type Render struct {
 	token      string
+	ownerID    string
 	httpClient *http.Client
 }
 
@@ -36,13 +39,17 @@ func (r *Render) Name() string {
 }
 
 func (r *Render) doRequest(method, path string, body []byte) (*http.Response, error) {
+	return r.doRequestRaw(method, renderBaseURL+path, body)
+}
+
+func (r *Render) doRequestRaw(method, url string, body []byte) (*http.Response, error) {
 	var reqBody *bytes.Reader
 	if body != nil {
 		reqBody = bytes.NewReader(body)
 	} else {
 		reqBody = bytes.NewReader(nil)
 	}
-	req, err := http.NewRequest(method, renderBaseURL+path, reqBody)
+	req, err := http.NewRequest(method, url, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +82,35 @@ func (r *Render) Validate(token string) error {
 		return fmt.Errorf("render API returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func (r *Render) getOwnerID() (string, error) {
+	if r.ownerID != "" {
+		return r.ownerID, nil
+	}
+	resp, err := r.doRequest("GET", "/owners", nil)
+	if err != nil {
+		return "", fmt.Errorf("get owners: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("render API returned status %d", resp.StatusCode)
+	}
+
+	var owners []struct {
+		Owner struct {
+			ID string `json:"id"`
+		} `json:"owner"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&owners); err != nil {
+		return "", fmt.Errorf("decode owners: %w", err)
+	}
+	if len(owners) == 0 {
+		return "", fmt.Errorf("no owners found")
+	}
+	r.ownerID = owners[0].Owner.ID
+	return r.ownerID, nil
 }
 
 func mapRenderStatus(status string) string {
@@ -239,27 +275,53 @@ func (r *Render) Redeploy(serviceID string) (*Deployment, error) {
 }
 
 func (r *Render) GetLogs(serviceID string, opts LogOptions) ([]LogEntry, error) {
-	path := fmt.Sprintf("/services/%s/logs", serviceID)
+	limit := 100
+	if opts.Tail > 0 {
+		limit = opts.Tail
+	}
 
-	resp, err := r.doRequest("GET", path, nil)
+	ownerID, err := r.getOwnerID()
+	if err != nil {
+		return nil, fmt.Errorf("get owner: %w", err)
+	}
+
+	params := url.Values{}
+	params.Add("resource", serviceID)
+	params.Add("ownerId", ownerID)
+	params.Add("limit", fmt.Sprintf("%d", limit))
+	params.Add("direction", "backward")
+
+	if opts.Since > 0 {
+		startTime := time.Now().Add(-opts.Since).UTC().Format(time.RFC3339)
+		params.Add("startTime", startTime)
+	}
+
+	reqURL := renderBaseURL + "/logs?" + params.Encode()
+
+	resp, err := r.doRequestRaw("GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get logs: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("render API returned status %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("render API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var rawLogs []struct {
-		ID        string    `json:"id"`
-		Timestamp time.Time `json:"timestamp"`
-		Level     string    `json:"level"`
-		Message   string    `json:"message"`
+	var logsResp struct {
+		Logs []struct {
+			ID        string    `json:"id"`
+			Timestamp time.Time `json:"timestamp"`
+			Level     string    `json:"level"`
+			Message   string    `json:"message"`
+		} `json:"logs"`
+		HasMore bool `json:"hasMore"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rawLogs); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&logsResp); err != nil {
 		return nil, fmt.Errorf("decode logs: %w", err)
 	}
+	rawLogs := logsResp.Logs
 
 	var entries []LogEntry
 	for _, l := range rawLogs {
@@ -278,19 +340,9 @@ func (r *Render) GetLogs(serviceID string, opts LogOptions) ([]LogEntry, error) 
 		})
 	}
 
-	if opts.Since > 0 {
-		cutoff := time.Now().Add(-opts.Since)
-		var filtered []LogEntry
-		for _, e := range entries {
-			if e.Timestamp.After(cutoff) {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
-	}
-
-	if opts.Tail > 0 && len(entries) > opts.Tail {
-		entries = entries[len(entries)-opts.Tail:]
+	// Reverse to chronological order (API returns newest first)
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
 	}
 
 	return entries, nil
