@@ -144,6 +144,8 @@ func TokenURL(name string) string {
 		return "https://supabase.com/dashboard/account/tokens"
 	case "render":
 		return "https://dashboard.render.com/u/settings#api-keys"
+	case "flyio":
+		return "https://fly.io/docs/security/tokens/"
 	default:
 		return ""
 	}
